@@ -4,6 +4,7 @@ import requests
 
 AUTH = "https://auth-prod.api.wyze.com/api/user/login"
 EVENT = "https://api.wyzecam.com/app/v2/device/get_event_list"
+REPLAY_URL = "https://kvs-service.wyzecam.com/app/v4/replay_url"
 
 
 def _triple_md5(txt: str) -> str:
@@ -70,27 +71,8 @@ def dash_mpd(access_token: str, device_id: str, model: str, start_ms: int, end_m
         "resource_version": 0,
         "is_live": "false",
     }
-    r = requests.get(
-        "https://kvs-service.wyzecam.com/app/v4/replay_url", headers={"Authorization": access_token}, params=params, timeout=10
-    )
+    r = requests.get(REPLAY_URL, headers={"Authorization": access_token}, params=params, timeout=10)
 
     r.raise_for_status()
 
     return r.json()["data"]
-
-
-"""
-
-from auth import email, password, key_id, api_key
-import util.wyze as wz
-
-
-mac = 'D03F27511BDF'
-access_token, refresh_token, user_id = wz.login(email, password, key_id, api_key)
-
-events = wz.recent_events(access_token, refresh_token, user_id, mac, minutes=30)
-
-start_ms, end_ms = wz.kvs_times(events[0])
-wz.dash_mpd(access_token, device_id=mac, model="WYZE_CAKP2JFUS", start_ms=start_ms, end_ms=end_ms)
-
-"""
