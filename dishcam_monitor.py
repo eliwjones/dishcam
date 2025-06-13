@@ -1,73 +1,15 @@
-import json
 import os
-import tempfile
 from pathlib import Path
 
-import requests
 
 from .util import wyze as wz
-from .dishcam import ask_about_image
+from .dishcam import ask_about_image, download_jpg, load_state, save_state
+from .dishcam import CAMERA_MODEL, CAMERA_MAC, STATE_FILE
 from .auth import email, password, key_id, api_key
-
-STATE_FILE = Path("dishcam_state.json")
-CAMERA_MODEL = "WYZE_CAKP2JFUS"
-CAMERA_MAC = "D03F27511BDF"
-
-
-def load_state():
-    if STATE_FILE.exists():
-        with STATE_FILE.open() as file_handle:
-            return json.load(file_handle)
-
-    return {
-        "camera_mac": CAMERA_MAC,
-        "camera_model": CAMERA_MODEL,
-        "events": {},
-        "processed": {},
-        "last_no_event_id": None,
-        "cutovers": [],
-    }
-
-
-def save_state(state):
-    with STATE_FILE.open("w") as file_handle:
-        json.dump(state, file_handle)
-
-
-def download_jpg(url: str) -> str:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://my.wyze.com/",
-    }
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
-
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-    temp_file.write(response.content)
-    temp_file.close()
-    return temp_file.name
-
-
-def fresh_cutover_mpd(index: int = -1, state_path="dishcam_state.json") -> str:
-    with open(state_path) as fh:
-        state = json.load(fh)
-
-    try:
-        cutover = state["cutovers"][index]
-    except IndexError:
-        raise ValueError("No cutover stored at that index")
-
-    access_token, *_ = wz.login(email, password, key_id, api_key)
-
-    return wz.dash_mpd(
-        access_token, device_id=state["camera_mac"], model=state["camera_model"], start_ms=cutover["start_ms"], end_ms=cutover["end_ms"]
-    )
 
 
 def main():
-    state = load_state()
+    state = load_state(STATE_FILE, CAMERA_MAC, CAMERA_MODEL)
     print("Loaded state:", state)
 
     access_token, refresh_token, user_id = wz.login(email, password, key_id, api_key)
@@ -117,7 +59,7 @@ def main():
         state["processed"][event_id] = "no"
         state["last_no_event_id"] = event_id
 
-    save_state(state)
+    save_state(state, STATE_FILE)
 
 
 if __name__ == "__main__":
