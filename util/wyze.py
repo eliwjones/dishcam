@@ -1,12 +1,9 @@
-"""
-util/wyze.py  –  minimal Wyze-cloud helper
-Env vars: WYZE_EMAIL, WYZE_PASSWORD, WYZE_KEY_ID, WYZE_API_KEY
-"""
-import hashlib, os, time, requests
+import hashlib
+import time
+import requests
 
 AUTH = "https://auth-prod.api.wyze.com/api/user/login"
 EVENT = "https://api.wyzecam.com/app/v2/device/get_event_list"
-REPLAY_URL = "https://kvs-service.wyzecam.com/app/v4/replay_url"
 
 
 def _triple_md5(txt: str) -> str:
@@ -51,17 +48,35 @@ def recent_events(token: str, refresh: str, user_id: str, mac: str, minutes=10, 
     return res.json().get("data", {}).get("event_list", [])
 
 
-def video_file_ids(evt: dict) -> list[str]:
-    return [f["file_id"] for f in evt.get("file_list", []) if f.get("type") in (2, 3) and f.get("status") in (1, 2)]
+def kvs_times(evt: dict) -> tuple[int, int]:
+    p = evt.get("event_params", {})
+    if "beginTime" in p and "endTime" in p:
+        return int(p["beginTime"]), int(p["endTime"])
+
+    for res in evt.get("event_resources", []):
+        if res.get("resource_type") == "kvs":
+            return int(res["begin_time"]), int(res["end_time"])
+
+    raise KeyError("no KVS timestamps in event")
 
 
-def save_mp4(url: str, path: str) -> str:
-    with requests.get(url, stream=True, timeout=30) as r, open(path, "wb") as fh:
-        r.raise_for_status()
-        for chunk in r.iter_content(1 << 15):
-            if chunk:
-                fh.write(chunk)
-    return path
+def dash_mpd(access_token: str, device_id: str, model: str, start_ms: int, end_ms: int) -> str:
+    params = {
+        "device_id": device_id,
+        "product_model": model,
+        "start_time": start_ms,
+        "end_time": end_ms,
+        "resource_type": "kvs",
+        "resource_version": 0,
+        "is_live": "false",
+    }
+    r = requests.get(
+        "https://kvs-service.wyzecam.com/app/v4/replay_url", headers={"Authorization": access_token}, params=params, timeout=10
+    )
+
+    r.raise_for_status()
+
+    return r.json()["data"]
 
 
 """
@@ -72,6 +87,10 @@ import util.wyze as wz
 
 mac = 'D03F27511BDF'
 access_token, refresh_token, user_id = wz.login(email, password, key_id, api_key)
+
 events = wz.recent_events(access_token, refresh_token, user_id, mac, minutes=30)
+
+start_ms, end_ms = wz.kvs_times(events[0])
+wz.dash_mpd(access_token, device_id=mac, model="WYZE_CAKP2JFUS", start_ms=start_ms, end_ms=end_ms)
 
 """
