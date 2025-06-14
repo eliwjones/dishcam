@@ -91,7 +91,7 @@ def main():
     print("Loaded state:", state)
 
     access_token, refresh_token, user_id = wz.login(email, password, key_id, api_key)
-    recent_events = wz.recent_events(access_token, refresh_token, user_id, CAMERA_MAC, minutes=60)
+    recent_events = wz.recent_events(access_token, refresh_token, user_id, CAMERA_MAC, minutes=10)
     recent_events.sort(key=lambda event: event["event_ts"])
 
     print("Found events:", len(recent_events))
