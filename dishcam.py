@@ -99,6 +99,8 @@ def main():
     for event in recent_events:
         event_id = event["event_id"]
         if event_id in state["processed"]:
+            print(f"[main] Skipping already processed event: {event_id}")
+
             continue
 
         first_jpg = next((file for file in event["file_list"] if file["type"] == 1), None)
