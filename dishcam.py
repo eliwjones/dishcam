@@ -1,9 +1,9 @@
 import json
 import os
+import urllib.request
 
 from pathlib import Path
 
-import requests
 import tempfile
 
 from google import genai
@@ -59,11 +59,13 @@ def download_jpg(url: str) -> str:
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://my.wyze.com/",
     }
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
+
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        response_content = response.read()
 
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".jpg")
-    temp_file.write(response.content)
+    temp_file.write(response_content)
     temp_file.close()
     return temp_file.name
 
@@ -130,10 +132,9 @@ def main():
                     )
 
             state["processed"][event_id] = "yes"
-            continue
-
-        state["processed"][event_id] = "no"
-        state["last_no_event_id"] = event_id
+        else:
+            state["processed"][event_id] = "no"
+            state["last_no_event_id"] = event_id
 
     save_state(state, STATE_FILE)
 
