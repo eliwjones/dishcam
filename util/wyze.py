@@ -1,6 +1,10 @@
 import hashlib
+import json
 import time
-import requests
+import urllib.error
+import urllib.parse
+import urllib.request
+
 
 AUTH = "https://auth-prod.api.wyze.com/api/user/login"
 EVENT = "https://api.wyzecam.com/app/v2/device/get_event_list"
@@ -16,10 +20,18 @@ def _triple_md5(txt: str) -> str:
 def login(email, password, key_id, api_key):
     hdr = {"KeyId": key_id, "ApiKey": api_key, "Content-Type": "application/json"}
     body = {"email": email, "password": _triple_md5(password)}
-    res = requests.post(AUTH, headers=hdr, json=body, timeout=10)
-    res.raise_for_status()
 
-    resp_json = res.json()
+    body_json = json.dumps(body).encode('utf-8')
+
+    req = urllib.request.Request(AUTH, headers=hdr, data=body_json, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        status = response.getcode()
+        response_content = response.read().decode('utf-8')
+
+    if status >= 400:
+        raise urllib.error.HTTPError(AUTH, status, f"HTTP Error: {status}", response.headers, None)
+
+    resp_json = json.loads(response_content)
 
     return resp_json["access_token"], resp_json["refresh_token"], resp_json["user_id"]
 
@@ -43,10 +55,19 @@ def recent_events(token: str, refresh: str, user_id: str, mac: str, minutes=10, 
         "ts": now,
     }
 
-    res = requests.post(EVENT, json=body, timeout=10)
-    res.raise_for_status()
+    body_json = json.dumps(body).encode('utf-8')
 
-    return res.json().get("data", {}).get("event_list", [])
+    req = urllib.request.Request(EVENT, headers={"Content-Type": "application/json"}, data=body_json, method="POST")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        status = response.getcode()
+        response_content = response.read().decode('utf-8')
+
+    if status >= 400:
+        raise urllib.error.HTTPError(EVENT, status, f"HTTP Error: {status}", response.headers, None)
+
+    resp_json = json.loads(response_content)
+
+    return resp_json.get("data", {}).get("event_list", [])
 
 
 def kvs_times(evt: dict) -> tuple[int, int]:
@@ -71,8 +92,18 @@ def dash_mpd(access_token: str, device_id: str, model: str, start_ms: int, end_m
         "resource_version": 0,
         "is_live": "false",
     }
-    r = requests.get(REPLAY_URL, headers={"Authorization": access_token}, params=params, timeout=10)
 
-    r.raise_for_status()
+    query_string = urllib.parse.urlencode(params)
+    url_with_params = f"{REPLAY_URL}?{query_string}"
 
-    return r.json()["data"]
+    req = urllib.request.Request(url_with_params, headers={"Authorization": access_token}, method="GET")
+    with urllib.request.urlopen(req, timeout=10) as response:
+        status = response.getcode()
+        response_content = response.read().decode('utf-8')
+
+    if status >= 400:
+        raise urllib.error.HTTPError(url_with_params, status, f"HTTP Error: {status}", response.headers, None)
+
+    resp_json = json.loads(response_content)
+
+    return resp_json["data"]
